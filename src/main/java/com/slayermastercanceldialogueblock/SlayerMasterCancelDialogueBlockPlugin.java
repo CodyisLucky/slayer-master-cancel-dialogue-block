@@ -3,11 +3,12 @@ package com.slayermastercanceldialogueblock;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.MenuAction;
 import net.runelite.api.events.MenuOptionClicked;
-import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.callback.ClientThread;
+import net.runelite.api.widgets.WidgetUtil;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -23,12 +24,10 @@ public class SlayerMasterCancelDialogueBlockPlugin extends Plugin
 {
 	private static final String CANCEL_OPTION_PREFIX = "Can I cancel that task";
 	private static final String BLOCKED_OPTION_TEXT = "Cancel option blocked by plugin";
+	private static final int CHATBOX_MULTI_INIT = 58;
 
 	@Inject
 	private Client client;
-
-	@Inject
-	private ClientThread clientThread;
 
 	@Override
 	protected void startUp() throws Exception
@@ -43,20 +42,25 @@ public class SlayerMasterCancelDialogueBlockPlugin extends Plugin
 	}
 
 	@Subscribe
-	public void onWidgetLoaded(WidgetLoaded event)
+	public void onScriptPostFired(ScriptPostFired event)
 	{
-		if (event.getGroupId() != InterfaceID.CHATMENU)
+		if (event.getScriptId() == CHATBOX_MULTI_INIT)
 		{
-			return;
+			replaceCancelOption();
 		}
-
-		clientThread.invokeLater(this::replaceCancelOption);
 	}
 
 	@Subscribe
 	public void onMenuOptionClicked(MenuOptionClicked event)
 	{
-		if (isBlockedOptionClick(event))
+		if (event.getMenuAction() != MenuAction.WIDGET_CONTINUE
+			|| WidgetUtil.componentToInterface(event.getParam1()) != InterfaceID.CHATMENU)
+		{
+			return;
+		}
+
+		Widget widget = event.getWidget();
+		if (widget != null && isBlockedOption(widget.getText()))
 		{
 			event.consume();
 			log.debug("Consumed slayer cancel dialogue click");
@@ -90,25 +94,11 @@ public class SlayerMasterCancelDialogueBlockPlugin extends Plugin
 				continue;
 			}
 
-			child.setHidden(false);
 			child.setText(BLOCKED_OPTION_TEXT);
-			child.setOnOpListener((Object[]) null);
 			child.setOnKeyListener((Object[]) null);
-			child.clearActions();
 			child.setHasListener(false);
 			log.debug("Replaced slayer cancel dialogue option");
 		}
-	}
-
-	private boolean isBlockedOptionClick(MenuOptionClicked event)
-	{
-		if (isBlockedOption(event.getMenuOption()) || isBlockedOption(event.getMenuTarget()))
-		{
-			return true;
-		}
-
-		Widget widget = event.getWidget();
-		return widget != null && isBlockedOption(widget.getText());
 	}
 
 	private static boolean isBlockedOption(String text)
